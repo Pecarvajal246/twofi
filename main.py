@@ -33,7 +33,7 @@ def get_live_streams(follows):
     streams=[f"{streamers[i]} {titles[i]} {viewer_counts[i]}" for i in range(len(streamers))]
     return streams
 
-def call_rofi(entries,command):
+def call_rofi(entries: list, command: list):
     proc = subprocess.Popen(command,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE)
@@ -45,17 +45,45 @@ def call_rofi(entries,command):
     exit_code = proc.returncode
     return answer.replace("\n",""), exit_code
 
-def open_stream(stream):
+def open_stream(stream: str):
     kill_process(['mpv', 'chatterino'])
     stream=stream.split()[0]
     subprocess.Popen(['chatterino', '-c', stream], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
     subprocess.Popen(['streamlink', f'https://www.twitch.tv/{stream}'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
-def kill_process(programs):
+def kill_process(programs: list):
     for program in programs:
         running=subprocess.run(['pgrep', program], capture_output=True)
         if running:
             subprocess.run(['killall', program])
+
+def handle_selection(selection: str, error_code: int):
+    if error_code == 0:
+        open_stream(selection)
+    elif error_code == 10:
+        options_menu(livestreams)
+
+def livestreams_menu(livestreams: list):
+    command='rofi -font xos4terminus 12 -bw 3 -kb-custom-1 ctrl+o -kb-custom-2 alt+u -dmenu -i -p wtwitch'.split()
+    selected_stream, error_code=call_rofi(livestreams, command)
+    handle_selection(selected_stream, error_code)
+
+def search_menu(search):
+    options=[]
+    command=f'rofi -font xos4terminus 12 -bw 3 -kb-custom-1 ctrl+o -kb-custom-2 alt+u -dmenu -i -p {search}'.split()
+    selection, error_code=call_rofi(options, command)
+
+
+def options_menu(livestreams: list):
+    options=['search channel', 'search category', 'follow channel', 'follow category','go back']
+    command='rofi -font xos4terminus 12 -bw 3 -kb-custom-1 ctrl+o -kb-custom-2 alt+u -dmenu -i -p options'.split()
+    selection, error_code=call_rofi(options, command)
+
+    if selection == 'go back':
+        livestreams_menu(livestreams)
+    elif 'search' in selection:
+        search_menu(selection.split()[1])
+
 
 with open("user_data.json", "r") as f:
     data = json.load(f)
@@ -71,7 +99,4 @@ else:
     follows=data["follows"]["channels"]
 
 livestreams=get_live_streams(follows)
-command='rofi -font xos4terminus 12 -bw 3 -kb-custom-1 alt+s -kb-custom-2 alt+u -dmenu -i -p wtwitch'.split()
-selected_stream, error_code=call_rofi(livestreams, command)
-if error_code == 0:
-    open_stream(selected_stream)
+livestreams_menu(livestreams)
