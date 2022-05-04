@@ -32,13 +32,14 @@ def get_live_streams(channels=None, channel_id=None, game_id=None):
     return streams
 
 
-def no_search_result(type: str, command: list):
+def no_search_result(type: str):
+    command[-1]=type
     msg=[f'no {type} found with that name (search another {type})', 'return to options', 'return to livestreams']
     selection, error_code=call_rofi(msg, command)
     if not selection: return
 
     if 'another' in selection:
-        search_or_follow_menu('search', type)
+        search_or_follow_menu('search', type, command)
 
     elif 'options' in selection:
         options_menu()
@@ -49,43 +50,26 @@ def no_search_result(type: str, command: list):
     return
 
 
-def search_streams(type: str, selection: str):
-    command=f'rofi -font xos4terminus 12 -bw 3 -dmenu -i -p {type}'.split()
+def get_categories(query: str):
+    response=twitch.search_categories(query=query, first=100)
+    data= response['data']
+    categories=[d['name'] for d in data]
+    return categories
 
-    if type == 'followed_category':
-        command[-1]='channel'
-        response=twitch.get_games(names=[selection])
-        game_id=response['data'][0]['id']
-        streams=get_live_streams(None, None, game_id)
 
-    elif type == 'category':
-        response=twitch.search_categories(query=selection, first=100)
-        data= response['data']
-        category=[d['name'] for d in data]
+def get_category_streams(category: str):
+    response=twitch.get_games(names=[category])
+    game_id=response['data'][0]['id']
+    streams=get_live_streams(None, None, game_id)
+    return streams
 
-        if not category:
-            no_search_result(type, command)
-            return
 
-        selection, error_code=call_rofi(category, command)
-        if not selection: return
-        game_id=[d['id'] for d in data if selection in d['name']]
-        streams=get_live_streams(None, None, game_id[0])
+def get_channels(channel: str):
+    response=twitch.search_channels(query=channel, first=100, live_only=True)
+    data= response['data']
+    channels=[d['id'] for d in data]
+    return channels
 
-    else:
-        response=twitch.search_channels(query=selection, first=100, live_only=True)
-        data= response['data']
-        channels=[d['id'] for d in data]
-
-        if not channels:
-            no_search_result(type, command)
-            return
-
-        streams=get_live_streams(None, channels, None)
-
-    selection, error_code=call_rofi(streams, command)
-    if not selection: return
-    return selection
 
 
 def import_user_follows(data: dict):
@@ -123,19 +107,6 @@ def add_follow(type: str, follow: str):
     return
 
 
-def call_rofi(entries: list, command: list):
-    proc = subprocess.Popen(command,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE)
-    for e in entries:
-        proc.stdin.write((e+"\n").encode('utf-8'))
-    proc.stdin.close()
-    answer = proc.stdout.read().decode('utf-8')
-    proc.wait()
-    exit_code = proc.returncode
-    return answer.replace("\n",""), exit_code
-
-
 def open_stream(stream: str):
     kill_process(['mpv', 'chatterino'])
     stream=stream.split()[0]
@@ -152,65 +123,134 @@ def kill_process(programs: list):
             subprocess.run(['killall', program])
 
 
-def livestreams_menu(livestreams: list):
-    command='rofi -font xos4terminus 12 -bw 3 -kb-custom-1 ctrl+o -kb-custom-2 ctrl+c -dmenu -i -p streams'.split()
-    selection, error_code=call_rofi(livestreams, command)
-    if not selection: return
+def call_rofi(entries: list, command: list):
+    proc = subprocess.Popen(command,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE)
+    for e in entries:
+        proc.stdin.write((e+"\n").encode('utf-8'))
+    proc.stdin.close()
+    answer = proc.stdout.read().decode('utf-8')
+    proc.wait()
+    exit_code = proc.returncode
+    return answer.replace("\n",""), exit_code
 
-    if error_code == 0:
-        open_stream(selection)
-
-    elif error_code == 10:
+def handle_error_code(error_code: int):
+    if error_code == 10:
         options_menu()
 
     elif error_code == 11:
-        categories_menu()
+        categories_menu(command)
+
+    elif error_code == 12:
+        livestreams_menu(livestreams)
 
     return
 
 
-def search_or_follow_menu(search_or_follow: str, type: str):
+def livestreams_menu(livestreams: list):
+    selection, error_code=call_rofi(livestreams, command)
+    if not selection: return
+
+    if error_code != 0:
+        handle_error_code(error_code)
+        return
+
+    open_stream(selection)
+    return
+
+
+def search_or_follow_menu(search_or_follow: str, type: str, command: list):
     options=[]
-    command=f'rofi -font xos4terminus 12 -bw 3 -dmenu -i -p {type}'.split()
+    command[-1]=type
     selection, error_code=call_rofi(options, command)
+    
+    if error_code != 0:
+        handle_error_code(error_code)
+        return
+
     if not selection: return
 
     if search_or_follow == 'follow':
         add_follow(type, selection)
+        return
+
+    elif type == 'category':
+        categories=get_categories(selection)
+        if not categories:
+            no_search_result('category')
+            return
+        category, error_code=call_rofi(categories, command)
+
+        if error_code != 0:
+            handle_error_code(error_code)
+            return
+
+        if not category: return
+        streams=get_category_streams(category)
+        command[-1]='channel'
+        stream, error_code=call_rofi(streams, command)
 
     else:
-        stream=search_streams(type, selection)
-        if stream:
-            open_stream(stream)
+        channels=get_channels(selection)
+        if not channels:
+            no_search_result('channel')
+            return
 
+        streams=get_live_streams(None, channels, None)
+        stream, error_code=call_rofi(streams, command)
+
+    if error_code != 0:
+        handle_error_code(error_code)
+        return
+
+    if not stream: return
+    open_stream(stream)
     return
 
 
 def options_menu():
     options=['search channel', 'search category', 'follow channel', 'follow category','go to livestreams', 'go to followed categories']
-    command='rofi -font xos4terminus 12 -bw 3 -dmenu -i -p options'.split()
+    # command='rofi -font xos4terminus 12 -bw 3 -dmenu -i -p options'.split()
     selection, error_code=call_rofi(options, command)
+
+    if error_code != 0:
+        handle_error_code(error_code)
+        return
+
     if not selection: return
 
-    if 'livestreams' in selection:
+    elif 'livestreams' in selection:
         livestreams_menu(livestreams)
 
     elif 'followed' in selection:
-        categories_menu()
+        categories_menu(command)
 
     elif 'search' or 'follow' in selection:
         selection=selection.split()
-        search_or_follow_menu(selection[0],selection[1])
+        search_or_follow_menu(selection[0],selection[1], command)
 
     return
 
-def categories_menu():
-    command='rofi -font xos4terminus 12 -bw 3 -dmenu -i -p category'.split()
+def categories_menu(command: list):
+    command[-1]='category'
     selection, error_code=call_rofi(categories, command)
+
+    if error_code != 0:
+        handle_error_code(error_code)
+        return
+
     if not selection: return
-    stream=search_streams('followed_category', selection)
-    if stream:
-        open_stream(stream)
+    streams=get_category_streams(selection)
+    command[-1]='channel'
+    stream, error_code=call_rofi(streams, command)
+
+    if error_code != 0:
+        handle_error_code(error_code)
+        return
+
+    if not stream: return
+    open_stream(stream)
     return
 
 
@@ -221,11 +261,12 @@ with open("user_data.json", "r") as f:
 
 
 if "follows" not in data:
-    channels=import_user_follows(data)
+    streams=import_user_follows(data)
 
 else:
-    channels=data["follows"]["channels"]
+    streams=data["follows"]["channels"]
     categories=data["follows"]["categories"]
 
-livestreams=get_live_streams(channels)
+command='rofi -font xos4terminus 12 -bw 3 -kb-custom-1 ctrl+o -kb-custom-2 ctrl+c -kb-custom-3 ctrl+s -dmenu -i -p streams'.split()
+livestreams=get_live_streams(streams)
 livestreams_menu(livestreams)
