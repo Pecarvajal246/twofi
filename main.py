@@ -37,8 +37,12 @@ def get_live_streams(channels=None, channel_id=None, game_id=None):
 def no_search_result(type: str):
     """Menu to show when no results where found for the specific query"""
     command[-1]=type
-    msg=[f'no {type} found with that name (search another {type})', 'return to options', 'return to livestreams']
-    selection, error_code=call_rofi(msg, command)
+    if type != 'streams':
+        msg=[f'no {type} found with that name (search another {type})', 'return to options', 'return to livestreams']
+    else:
+        msg=['no streams found in that category (search another category)', 'return to options', 'return to livestreams']
+
+    selection=handle_selection(msg, command)
     if not selection: return
 
     if 'another' in selection:
@@ -150,29 +154,28 @@ def call_rofi(entries: list, command: list):
     exit_code = proc.returncode
     return answer.replace("\n",""), exit_code
 
-def handle_error_code(error_code: int):
-    """Open the appropiate menu depending of the error code"""
+def handle_selection(entries: list, command: list):
+    """Open the appropiate menu depending of the error code or return the selected item"""
+    selection, error_code=call_rofi(entries, command)
     if error_code == 10:
         options_menu()
+        return
 
     elif error_code == 11:
         categories_menu(command)
+        return
 
     elif error_code == 12:
         livestreams_menu(livestreams)
+        return
 
-    return
+    return selection
 
 
 def livestreams_menu(livestreams: list):
     """Open the followed channels live streams menu"""
-    selection, error_code=call_rofi(livestreams, command)
+    selection=handle_selection(livestreams, command)
     if not selection: return
-
-    if error_code != 0:
-        handle_error_code(error_code)
-        return
-
     open_stream(selection)
     return
 
@@ -180,11 +183,8 @@ def livestreams_menu(livestreams: list):
 def search_channel_menu(command: list):
     """Open the search channel menu"""
     command[-1]='channel'
-    selection, error_code=call_rofi([], command)
-    if error_code != 0:
-        handle_error_code(error_code)
-        return
-
+    selection=handle_selection([], command)
+    if not selection: return
     channels=get_channels(selection)
 
     if not channels:
@@ -192,11 +192,7 @@ def search_channel_menu(command: list):
         return
 
     streams=get_live_streams(None, channels, None)
-    stream, error_code=call_rofi(streams, command)
-    if error_code != 0:
-        handle_error_code(error_code)
-        return
-
+    stream=handle_selection(streams, command)
     if not stream: return
     open_stream(stream)
     return
@@ -205,32 +201,20 @@ def search_channel_menu(command: list):
 def search_category_menu(command: list):
     """Open the search category menu"""
     command[-1]='category'
-    selection, error_code=call_rofi([], command)
-    if error_code != 0:
-        handle_error_code(error_code)
-        return
-
+    selection=handle_selection([], command)
     if not selection: return
-
     categories=get_categories(selection)
     if not categories:
         no_search_result('category')
         return
-    category, error_code=call_rofi(categories, command)
-
-    if error_code != 0:
-        handle_error_code(error_code)
-        return
-
+    category=handle_selection(categories, command)
     if not category: return
     streams=get_category_streams(category)
-    command[-1]='channel'
-    stream, error_code=call_rofi(streams, command)
-
-    if error_code != 0:
-        handle_error_code(error_code)
+    if not streams:
+        no_search_result('streams')
         return
-
+    command[-1]='channel'
+    stream=handle_selection(streams, command)
     if not stream: return
     open_stream(stream)
     return
@@ -239,13 +223,7 @@ def search_category_menu(command: list):
 def options_menu():
     """Open the options menu"""
     options=['search channel', 'search category', 'follow channel', 'follow category','go to livestreams', 'go to followed categories']
-    # command='rofi -font xos4terminus 12 -bw 3 -dmenu -i -p options'.split()
-    selection, error_code=call_rofi(options, command)
-
-    if error_code != 0:
-        handle_error_code(error_code)
-        return
-
+    selection=handle_selection(options, command)
     if not selection: return
 
     elif 'livestreams' in selection:
@@ -264,10 +242,8 @@ def options_menu():
         selection=selection.split()
         type=selection[1]
         command[-1]=type
-        selection, error_code=call_rofi([], command)
-        if error_code != 0:
-            handle_error_code(error_code)
-            return
+        selection=handle_selection([], command)
+        if not selection: return
         add_follow(type, selection)
 
     return
@@ -275,39 +251,30 @@ def options_menu():
 def categories_menu(command: list):
     """Open the followed categories menu"""
     command[-1]='category'
-    selection, error_code=call_rofi(categories, command)
-
-    if error_code != 0:
-        handle_error_code(error_code)
-        return
-
+    selection=handle_selection(categories, command)
     if not selection: return
     streams=get_category_streams(selection)
     command[-1]='channel'
-    stream, error_code=call_rofi(streams, command)
-
-    if error_code != 0:
-        handle_error_code(error_code)
-        return
-
+    stream=handle_selection(streams, command)
     if not stream: return
     open_stream(stream)
     return
 
-
+print('authenticating app')
 twitch = Twitch('2794znu5gmf9sjqla8fay7btcwwrja', 'df2v3u00rfw9poset4qpj5g2ir255p')
 
 with open("user_data.json", "r") as f:
     data = json.load(f)
 
 
-if "follows" not in data:
-    streams=import_user_follows(data)
-
-else:
+if "follows" in data:
     streams=data["follows"]["channels"]
     categories=data["follows"]["categories"]
 
+else:
+    streams=import_user_follows(data)
+
 command='rofi -font xos4terminus 12 -bw 3 -kb-custom-1 ctrl+o -kb-custom-2 ctrl+c -kb-custom-3 ctrl+s -dmenu -i -p streams'.split()
+print('getting live streams')
 livestreams=get_live_streams(streams)
 livestreams_menu(livestreams)
