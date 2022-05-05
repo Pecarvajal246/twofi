@@ -39,7 +39,12 @@ def no_search_result(type: str):
     if not selection: return
 
     if 'another' in selection:
-        search_or_follow_menu('search', type, command)
+
+        if type == 'channel':
+            search_channel(command)
+
+        else:
+            search_category(command)
 
     elif 'options' in selection:
         options_menu()
@@ -69,7 +74,6 @@ def get_channels(channel: str):
     data= response['data']
     channels=[d['id'] for d in data]
     return channels
-
 
 
 def import_user_follows(data: dict):
@@ -160,45 +164,53 @@ def livestreams_menu(livestreams: list):
     return
 
 
-def search_or_follow_menu(search_or_follow: str, type: str, command: list):
-    options=[]
-    command[-1]=type
-    selection, error_code=call_rofi(options, command)
-    
+def search_channel(command: list):
+    command[-1]='channel'
+    selection, error_code=call_rofi([], command)
+    if error_code != 0:
+        handle_error_code(error_code)
+        return
+
+    channels=get_channels(selection)
+
+    if not channels:
+        no_search_result('channel')
+        return
+
+    streams=get_live_streams(None, channels, None)
+    stream, error_code=call_rofi(streams, command)
+    if error_code != 0:
+        handle_error_code(error_code)
+        return
+
+    if not stream: return
+    open_stream(stream)
+    return
+
+
+def search_category(command: list):
+    command[-1]='category'
+    selection, error_code=call_rofi([], command)
     if error_code != 0:
         handle_error_code(error_code)
         return
 
     if not selection: return
 
-    if search_or_follow == 'follow':
-        add_follow(type, selection)
+    categories=get_categories(selection)
+    if not categories:
+        no_search_result('category')
+        return
+    category, error_code=call_rofi(categories, command)
+
+    if error_code != 0:
+        handle_error_code(error_code)
         return
 
-    elif type == 'category':
-        categories=get_categories(selection)
-        if not categories:
-            no_search_result('category')
-            return
-        category, error_code=call_rofi(categories, command)
-
-        if error_code != 0:
-            handle_error_code(error_code)
-            return
-
-        if not category: return
-        streams=get_category_streams(category)
-        command[-1]='channel'
-        stream, error_code=call_rofi(streams, command)
-
-    else:
-        channels=get_channels(selection)
-        if not channels:
-            no_search_result('channel')
-            return
-
-        streams=get_live_streams(None, channels, None)
-        stream, error_code=call_rofi(streams, command)
+    if not category: return
+    streams=get_category_streams(category)
+    command[-1]='channel'
+    stream, error_code=call_rofi(streams, command)
 
     if error_code != 0:
         handle_error_code(error_code)
@@ -226,9 +238,21 @@ def options_menu():
     elif 'followed' in selection:
         categories_menu(command)
 
-    elif 'search' or 'follow' in selection:
+    elif 'search channel' in selection:
+        search_channel(command)
+
+    elif 'search category' in selection:
+        search_category(command)
+
+    elif 'follow' in selection:
         selection=selection.split()
-        search_or_follow_menu(selection[0],selection[1], command)
+        type=selection[1]
+        command[-1]=type
+        selection, error_code=call_rofi([], command)
+        if error_code != 0:
+            handle_error_code(error_code)
+            return
+        add_follow(type, selection)
 
     return
 
