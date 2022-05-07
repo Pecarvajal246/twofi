@@ -1,6 +1,7 @@
 from twitchAPI.twitch import Twitch
 import subprocess
 import json
+from xdg import xdg_config_home
 
 
 def get_follows(user_id: str):
@@ -26,8 +27,10 @@ def get_live_streams(channels=None, channel_id=None, game_id=None):
     streamers = [d["user_login"] for d in data]
     titles = [d["title"] for d in data]
     viewer_counts = [d["viewer_count"] for d in data]
+    game_names = [d["game_name"] for d in data]
     streams = [
-        f"{streamers[i]} {titles[i]} {viewer_counts[i]}" for i in range(len(streamers))
+        f"{streamers[i]} | ({game_names[i]}) | {titles[i]} | ({viewer_counts[i]})"
+        for i in range(len(streamers))
     ]
     return streams
 
@@ -79,40 +82,51 @@ def get_channels(channel: str):
     return channels
 
 
-def import_user_follows(data: dict):
+def import_user_follows(user: str):
     """Imports the followed channels from the users twitch account to the local database"""
-    user = data["login"]
+    subprocess.run(["notify-send", f"Importing {user}'s followed streams"])
     loginInfo = twitch.get_users(logins=[user])
     user_id = loginInfo["data"][0]["id"]
     follows = get_follows(user_id)
 
-    with open("user_data.json", "w") as f:
+    with config.open("w") as f:
         data["follows"] = {"channels": [], "categories": []}
         data["follows"]["channels"] = follows
         json.dump(data, f)
 
+    subprocess.run(["notify-send", f"Finished importing {user}'s followed streams"])
     return follows
 
 
-def add_follow(type: str, follow: str):
-    """Adds a channel or category to the follows local databse"""
+def follow_or_unfollow(type: str, selection: str, follow: bool):
+    """Adds or removes a channel or category from the follows local databse"""
     if type == "channel":
-        follows = data["follows"]["channels"]
-        follows.append(follow)
+        selection = selection.split()[0]
+        followed_channels = data["follows"]["channels"]
+        if follow:
+            followed_channels.append(selection)
+            subprocess.run(["notify-send", f"added {selection} to follows list"])
+        else:
+            followed_channels.remove(selection)
+            subprocess.run(["notify-send", f"removed {selection} from follows list"])
 
-        with open("user_data.json", "w") as f:
-            data["follows"]["channels"] = follows
+        with config.open("w") as f:
+            data["follows"]["channels"] = followed_channels
             json.dump(data, f)
 
     else:
-        follows = data["follows"]["categories"]
-        follows.append(follow)
+        followed_categories = data["follows"]["categories"]
+        if follow:
+            followed_categories.append(selection)
+            subprocess.run(["notify-send", f"added {selection} to follows list"])
+        else:
+            followed_categories.remove(selection)
+            subprocess.run(["notify-send", f"removed {selection} from follows list"])
 
-        with open("user_data.json", "w") as f:
-            data["follows"]["categories"] = follows
+        with config.open("w") as f:
+            data["follows"]["categories"] = followed_categories
             json.dump(data, f)
 
-    subprocess.run(["notify-send", f"added {follow} to follows list"])
     return
 
 
@@ -156,7 +170,7 @@ def call_rofi(entries: list, command: list):
     return answer.replace("\n", ""), exit_code
 
 
-def handle_selection(entries: list, command: list):
+def handle_selection(entries: list, command: list, type=None):
     """Open the appropiate menu depending of the error code or return the selected item"""
     selection, error_code = call_rofi(entries, command)
     if error_code == 10:
@@ -168,12 +182,27 @@ def handle_selection(entries: list, command: list):
     elif error_code == 12:
         livestreams_menu(livestreams)
         return
+    elif error_code == 13:
+        follow_or_unfollow(type, selection, True)
+        selection = handle_selection(entries, command, type)
+    elif error_code == 14:
+        follow_or_unfollow(type, selection, False)
+        selection = handle_selection(entries, command, type)
     return selection
+
+
+def import_menu(command: list):
+    command[-1] = "user name"
+    selection = handle_selection([], command, "channel")
+    if not selection:
+        return
+    import_user_follows(selection)
+    return
 
 
 def livestreams_menu(livestreams: list):
     """Open the followed channels live streams menu"""
-    selection = handle_selection(livestreams, command)
+    selection = handle_selection(livestreams, command, "channel")
     if not selection:
         return
     open_stream(selection)
@@ -191,7 +220,7 @@ def search_channel_menu(command: list):
         no_search_result("channel")
         return
     streams = get_live_streams(None, channels, None)
-    stream = handle_selection(streams, command)
+    stream = handle_selection(streams, command, "channel")
     if not stream:
         return
     open_stream(stream)
@@ -208,7 +237,7 @@ def search_category_menu(command: list):
     if not categories:
         no_search_result("category")
         return
-    category = handle_selection(categories, command)
+    category = handle_selection(categories, command, "category")
     if not category:
         return
     streams = get_category_streams(category)
@@ -216,7 +245,7 @@ def search_category_menu(command: list):
         no_search_result("streams")
         return
     command[-1] = "channel"
-    stream = handle_selection(streams, command)
+    stream = handle_selection(streams, command, "channel")
     if not stream:
         return
     open_stream(stream)
@@ -225,18 +254,24 @@ def search_category_menu(command: list):
 
 def options_menu():
     """Open the options menu"""
-    options = ["search channel", "search category", "follow channel", "follow category"]
+    options = [
+        "search channel",
+        "search category",
+        "follow channel",
+        "follow category",
+        "import follows",
+    ]
     selection = handle_selection(options, command)
     if not selection:
         return
     elif "livestreams" in selection:
         livestreams_menu(livestreams)
-    elif "followed" in selection:
-        categories_menu(command)
     elif "search channel" in selection:
         search_channel_menu(command)
     elif "search category" in selection:
         search_category_menu(command)
+    elif "import" in selection:
+        import_menu(command)
     elif "follow" in selection:
         selection = selection.split()
         type = selection[1]
@@ -244,7 +279,7 @@ def options_menu():
         selection = handle_selection([], command)
         if not selection:
             return
-        add_follow(type, selection)
+        follow_or_unfollow(type, selection, True)
     return
 
 
@@ -256,7 +291,7 @@ def categories_menu(command: list):
         return
     streams = get_category_streams(selection)
     command[-1] = "channel"
-    stream = handle_selection(streams, command)
+    stream = handle_selection(streams, command, "channel")
     if not stream:
         return
     open_stream(stream)
@@ -266,23 +301,27 @@ def categories_menu(command: list):
 print("authenticating app")
 twitch = Twitch("2794znu5gmf9sjqla8fay7btcwwrja", "df2v3u00rfw9poset4qpj5g2ir255p")
 
-with open("user_data.json", "r") as f:
-    data = json.load(f)
-
-
-if "follows" in data:
-    streams = data["follows"]["channels"]
-    categories = data["follows"]["categories"]
-
+path = xdg_config_home().joinpath("twofi")
+path.mkdir(exist_ok=True)
+config=path.joinpath("user_data.json")
+if config.is_file():
+    with config.open("r+") as f:
+        data = json.load(f)
 else:
-    streams = import_user_follows(data)
+    with config.open("w+") as f:
+        data = {"follows": {"channels": [], "categories": []}}
+        json.dump(data, f)
 
-keybindings = (
-    "alt+l: Followed Livestreams | alt+c: Followed Categories | alt+o: Options"
-)
-command = "rofi -font iosevka 12 -bw 3 -kb-custom-1 alt+o -kb-custom-2 alt+c -kb-custom-3 alt+l -dmenu -i -async-pre-read 1 -mesg ".split()
+streams = data["follows"]["channels"]
+categories = data["follows"]["categories"]
+
+keybindings = "alt+l: Followed Livestreams | alt+c: Followed Categories | alt+o: Options | alt+s: Follow selected item | alt+u: Unfollow selected item"
+command = "rofi -kb-custom-1 alt+o -kb-custom-2 alt+c -kb-custom-3 alt+l -kb-custom-4 alt+s -kb-custom-5 alt+u -dmenu -i -async-pre-read 1 -mesg ".split()
 command.append(keybindings)
 command.extend("-p streams".split())
 print("getting live streams")
-livestreams = get_live_streams(streams)
+if streams:
+    livestreams = get_live_streams(streams)
+else:
+    livestreams = []
 livestreams_menu(livestreams)
