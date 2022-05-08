@@ -1,39 +1,7 @@
-from twitchAPI.twitch import Twitch
 import subprocess
 import json
 from xdg import xdg_config_home
-
-
-def get_follows(user_id: str):
-    """Gets the user's followed channels from the twitch api"""
-    response = twitch.get_users_follows(first=100, from_id=user_id)
-    total_follows = len(response["data"])
-    follows = list()
-    for i in range(total_follows):
-        follows.append(response["data"][i]["to_login"])
-    return follows
-
-
-def get_live_streams(channels=None, channel_id=None, game_id=None):
-    """Gets live streams from the twitch api for the user followed channels list, channel query or category query"""
-    if channels:
-        response = twitch.get_streams(first=100, user_login=channels)
-    elif channel_id:
-        response = twitch.get_streams(first=100, user_id=channel_id)
-    else:
-        response = twitch.get_streams(first=100, game_id=game_id)
-
-    data = response["data"]
-    streamers = [d["user_login"] for d in data]
-    titles = [d["title"] for d in data]
-    viewer_counts = [d["viewer_count"] for d in data]
-    game_names = [d["game_name"] for d in data]
-    streams = [
-        f"{streamers[i]} | ({game_names[i]}) | {titles[i]} | ({viewer_counts[i]})"
-        for i in range(len(streamers))
-    ]
-    return streams
-
+import api
 
 def no_search_result(type: str):
     """Menu to show when no results where found for the specific query"""
@@ -56,46 +24,6 @@ def no_search_result(type: str):
     else:
         livestreams_menu(livestreams)
     return
-
-
-def get_categories(query: str):
-    """Gets categories that match the category query from the twitch api"""
-    response = twitch.search_categories(query=query, first=100)
-    data = response["data"]
-    categories = [d["name"] for d in data]
-    return categories
-
-
-def get_category_streams(category: str):
-    """Gets the live streams for a specific game id from the twitch api"""
-    response = twitch.get_games(names=[category])
-    game_id = response["data"][0]["id"]
-    streams = get_live_streams(None, None, game_id)
-    return streams
-
-
-def get_channels(channel: str):
-    """Gets the live streams that match the channel query from the twitch api"""
-    response = twitch.search_channels(query=channel, first=100, live_only=True)
-    data = response["data"]
-    channels = [d["id"] for d in data]
-    return channels
-
-
-def import_user_follows(user: str):
-    """Imports the followed channels from the users twitch account to the local database"""
-    subprocess.run(["notify-send", f"Importing {user}'s followed streams"])
-    loginInfo = twitch.get_users(logins=[user])
-    user_id = loginInfo["data"][0]["id"]
-    follows = get_follows(user_id)
-
-    with config.open("w") as f:
-        data["follows"] = {"channels": [], "categories": []}
-        data["follows"]["channels"] = follows
-        json.dump(data, f)
-
-    subprocess.run(["notify-send", f"Finished importing {user}'s followed streams"])
-    return follows
 
 
 def follow_or_unfollow(type: str, selection: str, follow: bool):
@@ -196,7 +124,7 @@ def import_menu(command: list):
     selection = handle_selection([], command, "channel")
     if not selection:
         return
-    import_user_follows(selection)
+    api.import_user_follows(selection)
     return
 
 
@@ -215,11 +143,11 @@ def search_channel_menu(command: list):
     selection = handle_selection([], command)
     if not selection:
         return
-    channels = get_channels(selection)
+    channels = api.get_channels(selection)
     if not channels:
         no_search_result("channel")
         return
-    streams = get_live_streams(None, channels, None)
+    streams = api.get_live_streams(None, channels, None)
     stream = handle_selection(streams, command, "channel")
     if not stream:
         return
@@ -233,14 +161,14 @@ def search_category_menu(command: list):
     selection = handle_selection([], command)
     if not selection:
         return
-    categories = get_categories(selection)
+    categories = api.get_categories(selection)
     if not categories:
         no_search_result("category")
         return
     category = handle_selection(categories, command, "category")
     if not category:
         return
-    streams = get_category_streams(category)
+    streams = api.get_category_streams(category)
     if not streams:
         no_search_result("streams")
         return
@@ -289,7 +217,7 @@ def categories_menu(command: list):
     selection = handle_selection(categories, command)
     if not selection:
         return
-    streams = get_category_streams(selection)
+    streams = api.get_category_streams(selection)
     command[-1] = "channel"
     stream = handle_selection(streams, command, "channel")
     if not stream:
@@ -297,9 +225,6 @@ def categories_menu(command: list):
     open_stream(stream)
     return
 
-
-print("authenticating app")
-twitch = Twitch("2794znu5gmf9sjqla8fay7btcwwrja", "df2v3u00rfw9poset4qpj5g2ir255p")
 
 path = xdg_config_home().joinpath("twofi")
 path.mkdir(exist_ok=True)
@@ -321,7 +246,7 @@ command.append(keybindings)
 command.extend("-p streams".split())
 print("getting live streams")
 if streams:
-    livestreams = get_live_streams(streams)
+    livestreams = api.get_live_streams(streams)
 else:
     livestreams = []
 livestreams_menu(livestreams)
