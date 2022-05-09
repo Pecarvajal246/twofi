@@ -8,9 +8,7 @@ setup(
     author='Pedro Carvajal',
     author_email='pacarvajal246@gmail.com',
     packages=['twofi'],
-    install_requires=['twitchAPI',
-                      'xdg',                     
-                      ],
+    install_requires=['twitchAPI'],
     entry_points = {
             'console_scripts': ['twofi=twofi:main'],
         },

@@ -1,6 +1,8 @@
+#!/usr/bin/env python3
 import subprocess
 import json
-from xdg import xdg_config_home
+from xdg.BaseDirectory import save_config_path
+from pathlib import Path
 import api
 
 
@@ -227,8 +229,7 @@ def main():
     livestreams_menu(livestreams)
 
 
-path = xdg_config_home().joinpath("twofi")
-path.mkdir(exist_ok=True)
+path = Path(save_config_path('twofi'))
 config=path.joinpath("user_data.json")
 if config.is_file():
     with config.open("r+") as f:
