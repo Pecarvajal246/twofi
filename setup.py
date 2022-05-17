@@ -10,7 +10,7 @@ setup(
     packages=['twofi'],
     install_requires=['twitchAPI'],
     entry_points = {
-            'console_scripts': ['twofi=twofi:main'],
+            'console_scripts': ['twofi=twofi.twofi:main'],
         },
     classifiers=[
         'Operating System :: POSIX :: Linux',        

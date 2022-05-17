@@ -3,6 +3,7 @@ import subprocess
 import json
 from xdg.BaseDirectory import save_config_path
 from pathlib import Path
+# from twofi import api
 import api
 
 
@@ -27,14 +28,16 @@ def no_search_result(type: str):
 def follow_or_unfollow(type: str, selection: str, follow: bool):
     """Adds or removes a channel or category from the follows local databse"""
     if type == "channel":
-        selection = selection.split()[0]
+        channel = selection.split()[0]
         followed_channels = data["follows"]["channels"]
         if follow:
-            followed_channels.append(selection)
-            subprocess.run(["notify-send", f"added {selection} to follows list"])
+            followed_channels.append(channel)
+            subprocess.run(["notify-send", f"added {channel} to follows list"])
+            livestreams.insert(0,selection)
         else:
-            followed_channels.remove(selection)
-            subprocess.run(["notify-send", f"removed {selection} from follows list"])
+            followed_channels.remove(channel)
+            subprocess.run(["notify-send", f"removed {channel} from follows list"])
+            livestreams.remove(selection)
 
         with config.open("w") as f:
             data["follows"]["channels"] = followed_channels
@@ -225,31 +228,34 @@ def categories_menu(command: list):
 
 
 def main():
+    global config, data, streams, categories, command, livestreams
+    path = Path(save_config_path('twofi'))
+    config=path.joinpath("user_data.json")
+    if config.is_file():
+        with config.open("r+") as f:
+            data = json.load(f)
+    else:
+        with config.open("w+") as f:
+            data = {"follows": {"channels": [], "categories": []}}
+            json.dump(data, f)
+
+
+    streams = data["follows"]["channels"]
+    categories = data["follows"]["categories"]
+
+    keybindings = "alt+l: Followed Livestreams | alt+c: Followed Categories | alt+o: Options | alt+s: Follow selected item | alt+u: Unfollow selected item"
+    command = "rofi -kb-custom-1 alt+o -kb-custom-2 alt+c -kb-custom-3 alt+l -kb-custom-4 alt+s -kb-custom-5 alt+u -dmenu -i -async-pre-read 1 -mesg ".split()
+    command.append(keybindings)
+    command.extend("-p streams".split())
+
+    if streams:
+        livestreams = api.get_live_streams(streams)
+    else:
+        livestreams = []
+
     print("getting live streams")
     livestreams_menu(livestreams)
 
 
-path = Path(save_config_path('twofi'))
-config=path.joinpath("user_data.json")
-if config.is_file():
-    with config.open("r+") as f:
-        data = json.load(f)
-else:
-    with config.open("w+") as f:
-        data = {"follows": {"channels": [], "categories": []}}
-        json.dump(data, f)
-
-streams = data["follows"]["channels"]
-categories = data["follows"]["categories"]
-
-keybindings = "alt+l: Followed Livestreams | alt+c: Followed Categories | alt+o: Options | alt+s: Follow selected item | alt+u: Unfollow selected item"
-command = "rofi -kb-custom-1 alt+o -kb-custom-2 alt+c -kb-custom-3 alt+l -kb-custom-4 alt+s -kb-custom-5 alt+u -dmenu -i -async-pre-read 1 -mesg ".split()
-command.append(keybindings)
-command.extend("-p streams".split())
-
-if streams:
-    livestreams = api.get_live_streams(streams)
-else:
-    livestreams = []
-
-main()
+if __name__=='__main__':
+    main()
