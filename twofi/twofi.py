@@ -1,7 +1,10 @@
+#!/usr/bin/env python3
 import subprocess
 import json
-from xdg import xdg_config_home
-import api
+from xdg.BaseDirectory import save_config_path
+from pathlib import Path
+from twofi import api
+
 
 def no_search_result(type: str):
     """Menu to show when no results where found for the specific query"""
@@ -14,29 +17,26 @@ def no_search_result(type: str):
     selection = handle_selection(msg, command)
     if not selection:
         return
-    if "another" in selection:
-        if type == "channel":
-            search_channel_menu(command)
-        else:
-            search_category_menu(command)
-    elif "options" in selection:
-        options_menu()
+    if type == "channel":
+        search_channel_menu(command)
     else:
-        livestreams_menu(livestreams)
+        search_category_menu(command)
     return
 
 
 def follow_or_unfollow(type: str, selection: str, follow: bool):
     """Adds or removes a channel or category from the follows local databse"""
     if type == "channel":
-        selection = selection.split()[0]
+        channel = selection.split()[0]
         followed_channels = data["follows"]["channels"]
         if follow:
-            followed_channels.append(selection)
-            subprocess.run(["notify-send", f"added {selection} to follows list"])
+            followed_channels.append(channel)
+            subprocess.run(["notify-send", f"added {channel} to follows list"])
+            livestreams.insert(0,selection)
         else:
-            followed_channels.remove(selection)
-            subprocess.run(["notify-send", f"removed {selection} from follows list"])
+            followed_channels.remove(channel)
+            subprocess.run(["notify-send", f"removed {channel} from follows list"])
+            livestreams.remove(selection)
 
         with config.open("w") as f:
             data["follows"]["channels"] = followed_channels
@@ -120,11 +120,20 @@ def handle_selection(entries: list, command: list, type=None):
 
 
 def import_menu(command: list):
+    """Open the import followed channels menu"""
+    global streams
     command[-1] = "user name"
     selection = handle_selection([], command, "channel")
     if not selection:
         return
-    api.import_user_follows(selection)
+    subprocess.run(["notify-send", f"Importing {selection}'s followed streams"])
+    follows = api.import_user_follows(selection)
+    follows=[follow for follow in follows if follow not in streams]
+    streams.extend(follows)
+    with config.open("w") as f:
+        data["follows"]["channels"] = streams
+        json.dump(data, f)
+    subprocess.run(["notify-send", f"Finished importing {selection}'s followed streams"])
     return
 
 
@@ -142,12 +151,14 @@ def search_channel_menu(command: list):
     command[-1] = "channel"
     selection = handle_selection([], command)
     if not selection:
-        return
-    channels = api.get_channels(selection)
-    if not channels:
-        no_search_result("channel")
-        return
-    streams = api.get_live_streams(None, channels, None)
+        streams = api.get_live_streams(None, None, None)
+    else:
+        channels = api.get_channels(selection)
+
+        if not channels:
+            no_search_result("channel")
+            return
+        streams = api.get_live_streams(None, channels, None)
     stream = handle_selection(streams, command, "channel")
     if not stream:
         return
@@ -160,8 +171,9 @@ def search_category_menu(command: list):
     command[-1] = "category"
     selection = handle_selection([], command)
     if not selection:
-        return
-    categories = api.get_categories(selection)
+        categories = api.get_categories(None)
+    else:
+        categories = api.get_categories(selection)
     if not categories:
         no_search_result("category")
         return
@@ -185,15 +197,13 @@ def options_menu():
     options = [
         "search channel",
         "search category",
-        "follow channel",
-        "follow category",
+        "follow channel (exact match)",
+        "follow category (exact match)",
         "import follows",
     ]
     selection = handle_selection(options, command)
     if not selection:
         return
-    elif "livestreams" in selection:
-        livestreams_menu(livestreams)
     elif "search channel" in selection:
         search_channel_menu(command)
     elif "search category" in selection:
@@ -226,27 +236,35 @@ def categories_menu(command: list):
     return
 
 
-path = xdg_config_home().joinpath("twofi")
-path.mkdir(exist_ok=True)
-config=path.joinpath("user_data.json")
-if config.is_file():
-    with config.open("r+") as f:
-        data = json.load(f)
-else:
-    with config.open("w+") as f:
-        data = {"follows": {"channels": [], "categories": []}}
-        json.dump(data, f)
+def main():
+    global config, data, streams, categories, command, livestreams
+    path = Path(save_config_path('twofi'))
+    config=path.joinpath("user_data.json")
+    if config.is_file():
+        with config.open("r+") as f:
+            data = json.load(f)
+    else:
+        with config.open("w+") as f:
+            data = {"follows": {"channels": [], "categories": []}}
+            json.dump(data, f)
 
-streams = data["follows"]["channels"]
-categories = data["follows"]["categories"]
 
-keybindings = "alt+l: Followed Livestreams | alt+c: Followed Categories | alt+o: Options | alt+s: Follow selected item | alt+u: Unfollow selected item"
-command = "rofi -kb-custom-1 alt+o -kb-custom-2 alt+c -kb-custom-3 alt+l -kb-custom-4 alt+s -kb-custom-5 alt+u -dmenu -i -async-pre-read 1 -mesg ".split()
-command.append(keybindings)
-command.extend("-p streams".split())
-print("getting live streams")
-if streams:
-    livestreams = api.get_live_streams(streams)
-else:
-    livestreams = []
-livestreams_menu(livestreams)
+    streams = data["follows"]["channels"]
+    categories = data["follows"]["categories"]
+    categories.sort()
+
+    keybindings = "alt+l: Followed Livestreams | alt+c: Followed Categories | alt+o: Options | alt+s: Follow selected item | alt+u: Unfollow selected item"
+    command = "rofi -kb-custom-1 alt+o -kb-custom-2 alt+c -kb-custom-3 alt+l -kb-custom-4 alt+s -kb-custom-5 alt+u -dmenu -i -async-pre-read 1 -mesg ".split()
+    command.append(keybindings)
+    command.extend("-p streams".split())
+
+    if streams:
+        livestreams = api.get_live_streams(streams)
+    else:
+        livestreams = []
+
+    livestreams_menu(livestreams)
+
+
+if __name__=='__main__':
+    main()

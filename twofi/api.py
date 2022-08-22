@@ -1,5 +1,4 @@
 from twitchAPI.twitch import Twitch
-import subprocess
 
 def get_follows(user_id: str):
     """Gets the user's followed channels from the twitch api"""
@@ -17,8 +16,10 @@ def get_live_streams(channels=None, channel_id=None, game_id=None):
         response = twitch.get_streams(first=100, user_login=channels)
     elif channel_id:
         response = twitch.get_streams(first=100, user_id=channel_id)
-    else:
+    elif game_id:
         response = twitch.get_streams(first=100, game_id=game_id)
+    else:
+        response = twitch.get_streams(first=100)
 
     data = response["data"]
     streamers = [d["user_login"] for d in data]
@@ -26,15 +27,18 @@ def get_live_streams(channels=None, channel_id=None, game_id=None):
     viewer_counts = [d["viewer_count"] for d in data]
     game_names = [d["game_name"] for d in data]
     streams = [
-        f"{streamers[i]} | ({game_names[i]}) | {titles[i]} | ({viewer_counts[i]})"
+        f"{streamers[i]} | {titles[i]} | {game_names[i]} | ({viewer_counts[i]})"
         for i in range(len(streamers))
     ]
     return streams
 
 
-def get_categories(query: str):
+def get_categories(query=None):
     """Gets categories that match the category query from the twitch api"""
-    response = twitch.search_categories(query=query, first=100)
+    if query:
+        response = twitch.search_categories(query=query, first=100)
+    else:
+        response = twitch.get_top_games(first=100)
     data = response["data"]
     categories = [d["name"] for d in data]
     return categories
@@ -58,17 +62,9 @@ def get_channels(channel: str):
 
 def import_user_follows(user: str):
     """Imports the followed channels from the users twitch account to the local database"""
-    subprocess.run(["notify-send", f"Importing {user}'s followed streams"])
     loginInfo = twitch.get_users(logins=[user])
     user_id = loginInfo["data"][0]["id"]
     follows = get_follows(user_id)
-
-    with config.open("w") as f:
-        data["follows"] = {"channels": [], "categories": []}
-        data["follows"]["channels"] = follows
-        json.dump(data, f)
-
-    subprocess.run(["notify-send", f"Finished importing {user}'s followed streams"])
     return follows
 
 twitch = Twitch("2794znu5gmf9sjqla8fay7btcwwrja", "df2v3u00rfw9poset4qpj5g2ir255p")
