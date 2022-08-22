@@ -1,6 +1,6 @@
 # twofi
 Rofi script to launch twitch livestreams using streamlink and chatterino
-![Imgur](https://imgur.com/GhSVJqe.gif)
+![record](https://user-images.githubusercontent.com/98930451/186007335-2bc032fc-5053-4727-9dce-6f7a4408e008.gif)
 
 ### Features:
 * Import your followed channels from your twitch account into a local database
@@ -18,6 +18,7 @@ cd twofi
 pipx install .
 ```
 ### Dependencies:
+
 * [Rofi](https://github.com/davatorium/rofi)
 * [Streamlink](https://github.com/streamlink/streamlink)
 * [Chatterino](https://github.com/Chatterino/chatterino2)
