@@ -3,8 +3,7 @@ import subprocess
 import json
 from xdg.BaseDirectory import save_config_path
 from pathlib import Path
-# from twofi import api
-import api
+from twofi import api
 
 
 def no_search_result(type: str):
@@ -121,11 +120,20 @@ def handle_selection(entries: list, command: list, type=None):
 
 
 def import_menu(command: list):
+    """Open the import followed channels menu"""
+    global streams
     command[-1] = "user name"
     selection = handle_selection([], command, "channel")
     if not selection:
         return
-    api.import_user_follows(selection)
+    subprocess.run(["notify-send", f"Importing {selection}'s followed streams"])
+    follows = api.import_user_follows(selection)
+    follows=[follow for follow in follows if follow not in streams]
+    streams.extend(follows)
+    with config.open("w") as f:
+        data["follows"]["channels"] = streams
+        json.dump(data, f)
+    subprocess.run(["notify-send", f"Finished importing {selection}'s followed streams"])
     return
 
 
@@ -143,12 +151,14 @@ def search_channel_menu(command: list):
     command[-1] = "channel"
     selection = handle_selection([], command)
     if not selection:
-        return
-    channels = api.get_channels(selection)
-    if not channels:
-        no_search_result("channel")
-        return
-    streams = api.get_live_streams(None, channels, None)
+        streams = api.get_live_streams(None, None, None)
+    else:
+        channels = api.get_channels(selection)
+
+        if not channels:
+            no_search_result("channel")
+            return
+        streams = api.get_live_streams(None, channels, None)
     stream = handle_selection(streams, command, "channel")
     if not stream:
         return
@@ -161,8 +171,9 @@ def search_category_menu(command: list):
     command[-1] = "category"
     selection = handle_selection([], command)
     if not selection:
-        return
-    categories = api.get_categories(selection)
+        categories = api.get_categories(None)
+    else:
+        categories = api.get_categories(selection)
     if not categories:
         no_search_result("category")
         return
@@ -186,15 +197,13 @@ def options_menu():
     options = [
         "search channel",
         "search category",
-        "follow channel",
-        "follow category",
+        "follow channel (exact match)",
+        "follow category (exact match)",
         "import follows",
     ]
     selection = handle_selection(options, command)
     if not selection:
         return
-    elif "livestreams" in selection:
-        livestreams_menu(livestreams)
     elif "search channel" in selection:
         search_channel_menu(command)
     elif "search category" in selection:
@@ -242,6 +251,7 @@ def main():
 
     streams = data["follows"]["channels"]
     categories = data["follows"]["categories"]
+    categories.sort()
 
     keybindings = "alt+l: Followed Livestreams | alt+c: Followed Categories | alt+o: Options | alt+s: Follow selected item | alt+u: Unfollow selected item"
     command = "rofi -kb-custom-1 alt+o -kb-custom-2 alt+c -kb-custom-3 alt+l -kb-custom-4 alt+s -kb-custom-5 alt+u -dmenu -i -async-pre-read 1 -mesg ".split()
@@ -253,7 +263,6 @@ def main():
     else:
         livestreams = []
 
-    print("getting live streams")
     livestreams_menu(livestreams)
 
 
