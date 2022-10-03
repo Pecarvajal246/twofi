@@ -24,7 +24,11 @@ pipx install .
 * [Chatterino](https://github.com/Chatterino/chatterino2)
 
 ### Usage:
-Just run the command:
+Run the daemon:
+```
+twofi_d
+```
+And then run the command:
 ```
 twofi
 ```
