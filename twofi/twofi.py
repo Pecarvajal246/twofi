@@ -1,19 +1,14 @@
 #!/usr/bin/env python3
 import subprocess
-import json
-from xdg.BaseDirectory import save_config_path
-from pathlib import Path
-from twofi import api
+from twofi import client
 
-
-def no_search_result(type: str):
+def no_search_result(type: str, command: list):
     """Menu to show when no results where found for the specific query"""
     command[-1] = type
     if type != "streams":
         msg = [f"no {type} found with that name (search another {type})"]
     else:
         msg = ["no streams found in that category (search another category)"]
-
     selection = handle_selection(msg, command)
     if not selection:
         return
@@ -28,33 +23,26 @@ def follow_or_unfollow(type: str, selection: str, follow: bool):
     """Adds or removes a channel or category from the follows local databse"""
     if type == "channel":
         channel = selection.split()[0]
-        followed_channels = data["follows"]["channels"]
+        followed_channels = client.streams()
         if follow:
             followed_channels.append(channel)
             subprocess.run(["notify-send", f"added {channel} to follows list"])
             livestreams.insert(0,selection)
+            client.update_db_streams(followed_channels, selection, True)
         else:
             followed_channels.remove(channel)
             subprocess.run(["notify-send", f"removed {channel} from follows list"])
             livestreams.remove(selection)
-
-        with config.open("w") as f:
-            data["follows"]["channels"] = followed_channels
-            json.dump(data, f)
-
+            client.update_db_streams(followed_channels, selection, False)
     else:
-        followed_categories = data["follows"]["categories"]
+        followed_categories = client.categories()
         if follow:
             followed_categories.append(selection)
             subprocess.run(["notify-send", f"added {selection} to follows list"])
         else:
             followed_categories.remove(selection)
             subprocess.run(["notify-send", f"removed {selection} from follows list"])
-
-        with config.open("w") as f:
-            data["follows"]["categories"] = followed_categories
-            json.dump(data, f)
-
+        client.update_db_categories(followed_categories)
     return
 
 
@@ -102,13 +90,13 @@ def handle_selection(entries: list, command: list, type=None):
     """Open the appropiate menu depending of the error code or return the selected item"""
     selection, error_code = call_rofi(entries, command)
     if error_code == 10:
-        options_menu()
+        options_menu(command)
         return
     elif error_code == 11:
         categories_menu(command)
         return
     elif error_code == 12:
-        livestreams_menu(livestreams)
+        livestreams_menu(command)
         return
     elif error_code == 13:
         follow_or_unfollow(type, selection, True)
@@ -127,17 +115,12 @@ def import_menu(command: list):
     if not selection:
         return
     subprocess.run(["notify-send", f"Importing {selection}'s followed streams"])
-    follows = api.import_user_follows(selection)
-    follows=[follow for follow in follows if follow not in streams]
-    streams.extend(follows)
-    with config.open("w") as f:
-        data["follows"]["channels"] = streams
-        json.dump(data, f)
+    client.import_user_follows(selection)
     subprocess.run(["notify-send", f"Finished importing {selection}'s followed streams"])
     return
 
 
-def livestreams_menu(livestreams: list):
+def livestreams_menu(command: list):
     """Open the followed channels live streams menu"""
     selection = handle_selection(livestreams, command, "channel")
     if not selection:
@@ -151,14 +134,13 @@ def search_channel_menu(command: list):
     command[-1] = "channel"
     selection = handle_selection([], command)
     if not selection:
-        streams = api.get_live_streams(None, None, None)
+        streams = client.get_live_streams(None, None, None)
     else:
-        channels = api.get_channels(selection)
-
+        channels = client.get_channels(selection)
         if not channels:
-            no_search_result("channel")
+            no_search_result("channel", command)
             return
-        streams = api.get_live_streams(None, channels, None)
+        streams = client.get_live_streams(None, channels, None)
     stream = handle_selection(streams, command, "channel")
     if not stream:
         return
@@ -171,18 +153,18 @@ def search_category_menu(command: list):
     command[-1] = "category"
     selection = handle_selection([], command)
     if not selection:
-        categories = api.get_categories(None)
+        categories = client.get_categories(None)
     else:
-        categories = api.get_categories(selection)
+        categories = client.get_categories(selection)
     if not categories:
-        no_search_result("category")
+        no_search_result("category", command)
         return
     category = handle_selection(categories, command, "category")
     if not category:
         return
-    streams = api.get_category_streams(category)
+    streams = client.get_category_streams(category)
     if not streams:
-        no_search_result("streams")
+        no_search_result("streams", command)
         return
     command[-1] = "channel"
     stream = handle_selection(streams, command, "channel")
@@ -192,7 +174,7 @@ def search_category_menu(command: list):
     return
 
 
-def options_menu():
+def options_menu(command):
     """Open the options menu"""
     options = [
         "search channel",
@@ -227,7 +209,7 @@ def categories_menu(command: list):
     selection = handle_selection(categories, command)
     if not selection:
         return
-    streams = api.get_category_streams(selection)
+    streams = client.get_category_streams(selection)
     command[-1] = "channel"
     stream = handle_selection(streams, command, "channel")
     if not stream:
@@ -237,33 +219,15 @@ def categories_menu(command: list):
 
 
 def main():
-    global config, data, streams, categories, command, livestreams
-    path = Path(save_config_path('twofi'))
-    config=path.joinpath("user_data.json")
-    if config.is_file():
-        with config.open("r+") as f:
-            data = json.load(f)
-    else:
-        with config.open("w+") as f:
-            data = {"follows": {"channels": [], "categories": []}}
-            json.dump(data, f)
-
-
-    streams = data["follows"]["channels"]
-    categories = data["follows"]["categories"]
-    categories.sort()
-
+    global livestreams, categories
     keybindings = "alt+l: Followed Livestreams | alt+c: Followed Categories | alt+o: Options | alt+s: Follow selected item | alt+u: Unfollow selected item"
     command = "rofi -kb-custom-1 alt+o -kb-custom-2 alt+c -kb-custom-3 alt+l -kb-custom-4 alt+s -kb-custom-5 alt+u -dmenu -i -async-pre-read 1 -mesg ".split()
     command.append(keybindings)
     command.extend("-p streams".split())
+    livestreams= client.livestreams()
+    categories=client.categories()
 
-    if streams:
-        livestreams = api.get_live_streams(streams)
-    else:
-        livestreams = []
-
-    livestreams_menu(livestreams)
+    livestreams_menu(command)
 
 
 if __name__=='__main__':

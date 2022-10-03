@@ -1,4 +1,11 @@
 from twitchAPI.twitch import Twitch
+from multiprocessing.managers import BaseManager
+import threading
+import time
+import json
+from pathlib import Path
+from xdg.BaseDirectory import save_config_path
+
 
 def get_follows(user_id: str):
     """Gets the user's followed channels from the twitch api"""
@@ -62,9 +69,85 @@ def get_channels(channel: str):
 
 def import_user_follows(user: str):
     """Imports the followed channels from the users twitch account to the local database"""
-    loginInfo = twitch.get_users(logins=[user])
-    user_id = loginInfo["data"][0]["id"]
+    login_info = twitch.get_users(logins=[user])
+    user_id = login_info["data"][0]["id"]
     follows = get_follows(user_id)
+    follows = [follow for follow in follows if follow not in streams]
+    streams.extend(follows)
+    with config.open("w") as f:
+        data["follows"]["channels"] = streams
+        json.dump(data, f)
     return follows
 
+
+def update_db_streams(followed_channels: list, channel: str, insert: bool):
+    """Updates the followed streams database"""
+    global streams
+    streams = followed_channels
+    if insert:
+        livestreams.insert(0, channel)
+    else:
+        livestreams.remove(channel)
+    with config.open("w") as f:
+        data["follows"]["channels"] = followed_channels
+        json.dump(data, f)
+
+
+def update_db_categories(followed_categories: list):
+    """Updates the followed categories database"""
+    categories = followed_categories
+    with config.open("w") as f:
+        data["follows"]["channels"] = followed_categories
+        json.dump(data, f)
+
+
 twitch = Twitch("2794znu5gmf9sjqla8fay7btcwwrja", "df2v3u00rfw9poset4qpj5g2ir255p")
+
+
+def livestreams_thread():
+    global livestreams, streams
+    while True:
+        if streams:
+            livestreams = get_live_streams(streams)
+            time.sleep(30)
+        else:
+            time.sleep(1)
+    return livestreams
+
+
+def main():
+    global livestreams, streams, categories
+    path = Path(save_config_path("twofi"))
+    config = path.joinpath("user_data.json")
+    if config.is_file():
+        with config.open("r+") as f:
+            data = json.load(f)
+    else:
+        with config.open("w+") as f:
+            data = {"follows": {"channels": [], "categories": []}}
+            json.dump(data, f)
+
+    streams = data["follows"]["channels"]
+    categories = data["follows"]["categories"]
+    categories.sort()
+
+    livestreams = []
+    x = threading.Thread(target=livestreams_thread, args=())
+    x.start()
+    BaseManager.register("livestreams", lambda: livestreams)
+    BaseManager.register("streams", lambda: streams)
+    BaseManager.register("categories", lambda: categories)
+    BaseManager.register("import_follows", import_user_follows)
+    BaseManager.register("get_live_streams", get_live_streams)
+    BaseManager.register("get_categories", get_categories)
+    BaseManager.register("get_category_streams", get_category_streams)
+    BaseManager.register("get_channels", get_channels)
+    BaseManager.register("update_db_streams", update_db_streams)
+    BaseManager.register("update_db_categories", update_db_categories)
+    manager = BaseManager(address=("0.0.0.0", 50000), authkey=b"abc")
+    server = manager.get_server()
+    server.serve_forever()
+
+
+if __name__ == "__main__":
+    main()
