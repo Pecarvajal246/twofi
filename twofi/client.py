@@ -19,8 +19,7 @@ def get_follows():
 
 
 def import_user_follows(user: str):
-    m.import_follows(user)
-    return
+    return m.import_follows(user)
 
 
 def get_live_streams(channels=None, channel_id=None, game_id=None):

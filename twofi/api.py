@@ -91,6 +91,7 @@ def update_db_streams(followed_channels: list, channel: str, insert: bool):
     with config.open("w") as f:
         data["follows"]["channels"] = followed_channels
         json.dump(data, f)
+    return
 
 
 def update_db_categories(followed_categories: list):
@@ -99,6 +100,7 @@ def update_db_categories(followed_categories: list):
     with config.open("w") as f:
         data["follows"]["channels"] = followed_categories
         json.dump(data, f)
+    return
 
 
 twitch = Twitch("2794znu5gmf9sjqla8fay7btcwwrja", "df2v3u00rfw9poset4qpj5g2ir255p")
@@ -116,7 +118,7 @@ def livestreams_thread():
 
 
 def main():
-    global livestreams, streams, categories
+    global livestreams, streams, categories, config, data
     path = Path(save_config_path("twofi"))
     config = path.joinpath("user_data.json")
     if config.is_file():

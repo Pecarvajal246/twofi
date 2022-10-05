@@ -115,8 +115,9 @@ def import_menu(command: list):
     if not selection:
         return
     subprocess.run(["notify-send", f"Importing {selection}'s followed streams"])
-    client.import_user_follows(selection)
+    new_follows=client.import_user_follows(selection)
     subprocess.run(["notify-send", f"Finished importing {selection}'s followed streams"])
+    subprocess.run(["notify-send", f"Added {new_follows} to database"])
     return
 
 
