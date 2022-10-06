@@ -49,6 +49,8 @@ def get_categories(query=None):
         response = twitch.get_top_games(first=100)
     data = response["data"]
     categories = [d["name"] for d in data]
+    if not categories:
+        return False
     categories_string = "\n".join(categories)
     return categories_string
 
@@ -66,7 +68,10 @@ def get_channels(channel: str):
     response = twitch.search_channels(query=channel, first=100, live_only=True)
     data = response["data"]
     channels = [d["id"] for d in data]
-    return channels
+    if not channels:
+        return False
+    live_channels= get_live_streams(None, channels, None)
+    return live_channels
 
 
 def import_user_follows(user: str):
@@ -141,7 +146,6 @@ def main():
     x = threading.Thread(target=livestreams_thread, args=())
     x.start()
     BaseManager.register("livestreams", lambda: livestreams)
-    BaseManager.register("streams", lambda: streams)
     BaseManager.register("categories", lambda: "\n".join(categories))
     BaseManager.register("import_follows", import_user_follows)
     BaseManager.register("get_live_streams", get_live_streams)

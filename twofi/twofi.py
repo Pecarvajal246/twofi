@@ -6,9 +6,9 @@ def no_search_result(type: str, command: list):
     """Menu to show when no results where found for the specific query"""
     command[-1] = type
     if type != "streams":
-        msg = [f"no {type} found with that name (search another {type})"]
+        msg = f"no {type} found with that name (search another {type})"
     else:
-        msg = ["no streams found in that category (search another category)"]
+        msg = "no streams found in that category (search another category)"
     selection = handle_selection(msg, command)
     if not selection:
         return
@@ -103,7 +103,6 @@ def handle_selection(entries: list, command: list, type=None):
 
 def import_menu(command: list):
     """Open the import followed channels menu"""
-    global streams
     command[-1] = "user name"
     selection = handle_selection("", command, "channel")
     if not selection:
@@ -133,11 +132,10 @@ def search_channel_menu(command: list):
     if not selection:
         streams = client.get_live_streams(None, None, None)
     else:
-        channels = client.get_channels(selection)
-        if not channels:
+        streams = client.get_channels(selection)
+        if not streams:
             no_search_result("channel", command)
             return
-        streams = client.get_live_streams(None, channels, None)
     stream = handle_selection(streams, command, "channel")
     if not stream:
         return

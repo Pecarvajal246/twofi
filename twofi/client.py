@@ -21,7 +21,7 @@ def get_live_streams(channels=None, channel_id=None, game_id=None):
 
 
 def get_categories(query=None):
-    return m.get_categories(query)
+    return m.get_categories(query)._getvalue()
 
 
 def get_category_streams(category: str):
