@@ -2,55 +2,47 @@ from multiprocessing.managers import BaseManager
 
 
 def categories():
-    categories = m.categories()
+    categories = m.api().categories()
     return categories
 
 
 def livestreams():
-    livestreams = m.livestreams()
+    livestreams = m.api().livestreams()
     return livestreams
 
 
 def import_user_follows(user: str):
-    return m.import_follows(user)
+    return m.api().import_follows(user)
 
 
 def get_live_streams(channels=None, channel_id=None, game_id=None):
-    livestreams = m.get_live_streams(channels, channel_id, game_id)
+    livestreams = m.api().get_live_streams(channels, channel_id, game_id)
     return livestreams
 
 
 def get_categories(query=None):
-    return m.get_categories(query)._getvalue()
+    return m.api().get_categories(query)
 
 
 def get_category_streams(category: str):
-    category_streams = m.get_category_streams(category)
+    category_streams = m.api().get_category_streams(category)
     return category_streams
 
 
 def get_channels(channel: str):
-    return m.get_channels(channel)._getvalue()
+    return m.api().get_channels(channel)
 
 
 def update_db_streams(channel: str, follow: bool):
-    m.update_db_streams(channel, follow)
+    m.api().update_db_streams(channel, follow)
     return
 
 
 def update_db_categories(category: str, follow: bool):
-    m.update_db_categories(category, follow)
+    m.api().update_db_categories(category, follow)
     return
 
 
-BaseManager.register("livestreams")
-BaseManager.register("categories")
-BaseManager.register("import_follows")
-BaseManager.register("get_live_streams")
-BaseManager.register("get_categories")
-BaseManager.register("get_category_streams")
-BaseManager.register("get_channels")
-BaseManager.register("update_db_streams")
-BaseManager.register("update_db_categories")
+BaseManager.register("api")
 m = BaseManager(address=("0.0.0.0", 50000), authkey=b"abc")
 m.connect()
