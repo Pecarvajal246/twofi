@@ -37,7 +37,8 @@ def get_live_streams(channels=None, channel_id=None, game_id=None):
         f"{streamers[i]} | {titles[i]} | {game_names[i]} | ({viewer_counts[i]})"
         for i in range(len(streamers))
     ]
-    return streams
+    streams_string = "\n".join(streams)
+    return streams_string
 
 
 def get_categories(query=None):
@@ -48,7 +49,8 @@ def get_categories(query=None):
         response = twitch.get_top_games(first=100)
     data = response["data"]
     categories = [d["name"] for d in data]
-    return categories
+    categories_string = "\n".join(categories)
+    return categories_string
 
 
 def get_category_streams(category: str):
@@ -80,25 +82,29 @@ def import_user_follows(user: str):
     return follows
 
 
-def update_db_streams(followed_channels: list, channel: str, insert: bool):
+def update_db_streams(channel: str, follow: bool):
     """Updates the followed streams database"""
-    global streams
-    streams = followed_channels
-    if insert:
-        livestreams.insert(0, channel)
+    global streams, livestreams
+    if follow:
+        streams.append(channel)
     else:
-        livestreams.remove(channel)
+        streams.remove(channel)
+    livestreams = get_live_streams(streams)
     with config.open("w") as f:
-        data["follows"]["channels"] = followed_channels
+        data["follows"]["channels"] = streams
         json.dump(data, f)
     return
 
 
-def update_db_categories(followed_categories: list):
+def update_db_categories(category: str, follow: bool):
     """Updates the followed categories database"""
-    categories = followed_categories
+    global categories
+    if follow:
+        categories.append(category)
+    else:
+        categories.remove(category)
     with config.open("w") as f:
-        data["follows"]["channels"] = followed_categories
+        data["follows"]["categories"] = categories
         json.dump(data, f)
     return
 
@@ -128,17 +134,15 @@ def main():
         with config.open("w+") as f:
             data = {"follows": {"channels": [], "categories": []}}
             json.dump(data, f)
-
     streams = data["follows"]["channels"]
     categories = data["follows"]["categories"]
     categories.sort()
-
-    livestreams = []
+    livestreams = None
     x = threading.Thread(target=livestreams_thread, args=())
     x.start()
     BaseManager.register("livestreams", lambda: livestreams)
     BaseManager.register("streams", lambda: streams)
-    BaseManager.register("categories", lambda: categories)
+    BaseManager.register("categories", lambda: "\n".join(categories))
     BaseManager.register("import_follows", import_user_follows)
     BaseManager.register("get_live_streams", get_live_streams)
     BaseManager.register("get_categories", get_categories)

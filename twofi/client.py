@@ -1,21 +1,14 @@
 from multiprocessing.managers import BaseManager
-import copy
-
-
-def streams():
-    return copy.deepcopy(m.streams())
 
 
 def categories():
-    return copy.deepcopy(m.categories())
+    categories = m.categories()
+    return categories
 
 
 def livestreams():
-    return copy.deepcopy(m.livestreams())
-
-
-def get_follows():
-    return copy.deepcopy(m.follows())
+    livestreams = m.livestreams()
+    return livestreams
 
 
 def import_user_follows(user: str):
@@ -23,32 +16,35 @@ def import_user_follows(user: str):
 
 
 def get_live_streams(channels=None, channel_id=None, game_id=None):
-    return copy.deepcopy(m.get_live_streams(channels, channel_id, game_id))
+    livestreams = m.get_live_streams(channels, channel_id, game_id)
+    return livestreams
 
 
 def get_categories(query=None):
-    return copy.deepcopy(m.get_categories(query))
+    return m.get_categories(query)
 
 
 def get_category_streams(category: str):
-    return copy.deepcopy(m.get_category_streams(category))
+    category_streams = m.get_category_streams(category)
+    return category_streams
 
 
 def get_channels(channel: str):
-    return copy.deepcopy(m.get_channels(channel))
+    return m.get_channels(channel)._getvalue()
 
-def update_db_streams(followed_channels: list, channel: str, insert: bool):
-    m.update_db_streams(followed_channels, channel, insert)
+
+def update_db_streams(channel: str, follow: bool):
+    m.update_db_streams(channel, follow)
     return
 
-def update_db_categories(followed_categories: list):
-    m.update_db_categories(followed_categories)
+
+def update_db_categories(category: str, follow: bool):
+    m.update_db_categories(category, follow)
     return
+
 
 BaseManager.register("livestreams")
-BaseManager.register("streams")
 BaseManager.register("categories")
-BaseManager.register("follows")
 BaseManager.register("import_follows")
 BaseManager.register("get_live_streams")
 BaseManager.register("get_categories")

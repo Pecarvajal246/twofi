@@ -21,28 +21,23 @@ def no_search_result(type: str, command: list):
 
 def follow_or_unfollow(type: str, selection: str, follow: bool):
     """Adds or removes a channel or category from the follows local databse"""
+    global livestreams, categories
     if type == "channel":
         channel = selection.split()[0]
-        followed_channels = client.streams()
         if follow:
-            followed_channels.append(channel)
             subprocess.run(["notify-send", f"added {channel} to follows list"])
-            livestreams.insert(0,selection)
-            client.update_db_streams(followed_channels, selection, True)
         else:
-            followed_channels.remove(channel)
             subprocess.run(["notify-send", f"removed {channel} from follows list"])
-            livestreams.remove(selection)
-            client.update_db_streams(followed_channels, selection, False)
+        client.update_db_streams(channel, follow)
+        livestreams = client.livestreams()
     else:
         followed_categories = client.categories()
         if follow:
-            followed_categories.append(selection)
             subprocess.run(["notify-send", f"added {selection} to follows list"])
         else:
-            followed_categories.remove(selection)
             subprocess.run(["notify-send", f"removed {selection} from follows list"])
-        client.update_db_categories(followed_categories)
+        client.update_db_categories(selection, follow)
+        categories = client.categories()
     return
 
 
@@ -74,11 +69,10 @@ def kill_process(programs: list):
             subprocess.run(["killall", program])
 
 
-def call_rofi(entries: list, command: list):
+def call_rofi(entries: str, command: list):
     """Open rofi with the specified entries"""
     proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    for e in entries:
-        proc.stdin.write((e + "\n").encode("utf-8"))
+    proc.stdin.write((entries).encode("utf-8"))
     proc.stdin.close()
     answer = proc.stdout.read().decode("utf-8")
     proc.wait()
@@ -111,12 +105,14 @@ def import_menu(command: list):
     """Open the import followed channels menu"""
     global streams
     command[-1] = "user name"
-    selection = handle_selection([], command, "channel")
+    selection = handle_selection("", command, "channel")
     if not selection:
         return
     subprocess.run(["notify-send", f"Importing {selection}'s followed streams"])
-    new_follows=client.import_user_follows(selection)
-    subprocess.run(["notify-send", f"Finished importing {selection}'s followed streams"])
+    new_follows = client.import_user_follows(selection)
+    subprocess.run(
+        ["notify-send", f"Finished importing {selection}'s followed streams"]
+    )
     subprocess.run(["notify-send", f"Added {new_follows} to database"])
     return
 
@@ -133,7 +129,7 @@ def livestreams_menu(command: list):
 def search_channel_menu(command: list):
     """Open the search channel menu"""
     command[-1] = "channel"
-    selection = handle_selection([], command)
+    selection = handle_selection("", command)
     if not selection:
         streams = client.get_live_streams(None, None, None)
     else:
@@ -152,7 +148,7 @@ def search_channel_menu(command: list):
 def search_category_menu(command: list):
     """Open the search category menu"""
     command[-1] = "category"
-    selection = handle_selection([], command)
+    selection = handle_selection("", command)
     if not selection:
         categories = client.get_categories(None)
     else:
@@ -184,7 +180,8 @@ def options_menu(command):
         "follow category (exact match)",
         "import follows",
     ]
-    selection = handle_selection(options, command)
+    options_string= '\n'.join(options)
+    selection = handle_selection(options_string, command)
     if not selection:
         return
     elif "search channel" in selection:
@@ -197,7 +194,7 @@ def options_menu(command):
         selection = selection.split()
         type = selection[1]
         command[-1] = type
-        selection = handle_selection([], command)
+        selection = handle_selection("", command)
         if not selection:
             return
         follow_or_unfollow(type, selection, True)
@@ -225,11 +222,11 @@ def main():
     command = "rofi -kb-custom-1 alt+o -kb-custom-2 alt+c -kb-custom-3 alt+l -kb-custom-4 alt+s -kb-custom-5 alt+u -dmenu -i -async-pre-read 1 -mesg ".split()
     command.append(keybindings)
     command.extend("-p streams".split())
-    livestreams= client.livestreams()
-    categories=client.categories()
+    livestreams = client.livestreams()
+    categories = client.categories()
 
     livestreams_menu(command)
 
 
-if __name__=='__main__':
+if __name__ == "__main__":
     main()
