@@ -5,7 +5,7 @@ import xmlrpc.client
 
 def no_search_result(type: str, command: list):
     """Menu to show when no results where found for the specific query"""
-    command[-1] = type
+    command[-1] = type + " "
     if type != "streams":
         msg = f"no {type} found with that name (search another {type})"
     else:
@@ -38,8 +38,12 @@ def call_rofi(entries: str, command: list):
     proc.stdin.close()
     answer = proc.stdout.read().decode("utf-8")
     proc.wait()
+    answer = answer.replace("\n", "")
     exit_code = proc.returncode
-    return answer.replace("\n", ""), exit_code
+    if "error_code" in answer:
+        exit_code = int(answer.split("error_code")[0])
+        answer = answer.split("error_code")[1]
+    return answer, exit_code
 
 
 def handle_selection(entries: list, command: list, type=None):
@@ -66,7 +70,9 @@ def handle_selection(entries: list, command: list, type=None):
 def import_menu(command: list):
     """Open the import followed channels menu"""
     command[-1] = "user name "
+    command.append("--print-query")
     selection = handle_selection("", command, "channel")
+    command.remove("--print-query")
     if not selection:
         return
     CLIENT.import_user_follows(selection)
@@ -86,8 +92,10 @@ def livestreams_menu(command: list):
 
 def search_channel_menu(command: list):
     """Open the search channel menu"""
-    command[-1] = "channel"
+    command[-1] = "channel "
+    command.append("--print-query")
     selection = handle_selection("", command)
+    command.remove("--print-query")
     streams = CLIENT.get_channels(selection)
     if not streams:
         no_search_result("channel", command)
@@ -101,8 +109,10 @@ def search_channel_menu(command: list):
 
 def search_category_menu(command: list):
     """Open the search category menu"""
-    command[-1] = "category"
+    command[-1] = "category "
+    command.append("--print-query")
     selection = handle_selection("", command)
+    command.remove("--print-query")
     categories = CLIENT.get_categories(selection)
     if not categories:
         no_search_result("category", command)
@@ -114,7 +124,7 @@ def search_category_menu(command: list):
     if not streams:
         no_search_result("streams", command)
         return
-    command[-1] = "channel"
+    command[-1] = "channel "
     stream = handle_selection(streams, command, "channel")
     if not stream:
         return
@@ -124,6 +134,7 @@ def search_category_menu(command: list):
 
 def options_menu(command):
     """Open the options menu"""
+    command[-1] = "option "
     options = [
         "search channel",
         "search category",
@@ -154,12 +165,12 @@ def options_menu(command):
 
 def categories_menu(command: list):
     """Open the followed categories menu"""
-    command[-1] = "category"
+    command[-1] = "category "
     selection = handle_selection(CATEGORIES, command)
     if not selection:
         return
     streams = CLIENT.get_category_streams(selection)
-    command[-1] = "channel"
+    command[-1] = "channel "
     stream = handle_selection(streams, command, "channel")
     if not stream:
         return
@@ -170,9 +181,14 @@ def categories_menu(command: list):
 def main():
     global LIVESTREAMS, CATEGORIES, CLIENT
     keybindings = "alt+l: Followed Livestreams | alt+c: Followed Categories | alt+o: Options | alt+s: Follow selected item | alt+u: Unfollow selected item"
-    command = "rofi -kb-custom-1 alt+o -kb-custom-2 alt+c -kb-custom-3 alt+l -kb-custom-4 alt+s -kb-custom-5 alt+u -dmenu -i -async-pre-read 1 -mesg ".split()
+    command = "fzf --reverse --border --header".split()
     command.append(keybindings)
-    command.extend("-p streams".split())
+    command.extend(["--bind=alt-o:execute(echo 10 error_code {})+abort"])
+    command.extend(["--bind=alt-c:execute(echo 11 error_code {})+abort"])
+    command.extend(["--bind=alt-l:execute(echo 12 error_code {})+abort"])
+    command.extend(["--bind=alt-s:execute(echo 13 error_code {})+abort"])
+    command.extend(["--bind=alt-u:execute(echo 14 error_code {})+abort"])
+    command.extend("--prompt streams ".split())
     CLIENT = xmlrpc.client.ServerProxy("http://localhost:8000", allow_none=True)
     LIVESTREAMS = CLIENT.livestreams()
     CATEGORIES = CLIENT.categories()
