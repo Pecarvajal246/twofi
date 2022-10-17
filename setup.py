@@ -10,10 +10,10 @@ setup(
     packages=['twofi'],
     install_requires=['twitchAPI', 'pyxdg'],
     entry_points = {
-        'console_scripts': ['twofi=twofi.twofi:main', 'twofi_d=twofi.api:main', 'twofi_fzf=twofi.fzf:main']
+        'console_scripts': ['twofi=twofi.twofi:main', 'twofi_d=twofi.api:main']
         },
     classifiers=[
-        'Operating System :: POSIX :: Linux',        
+        'Operating System :: POSIX :: Linux',
         "License :: OSI Approved :: MIT License",
         'Programming Language :: Python :: 3.10',
     ],

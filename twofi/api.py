@@ -100,13 +100,11 @@ class Api:
         follows = self.get_follows(user_id)
         follows = [follow for follow in follows if follow not in STREAMS]
         STREAMS.extend(follows)
-        _, _, LIVESTREAMS= self.get_live_streams(STREAMS)
+        _, _, LIVESTREAMS = self.get_live_streams(STREAMS)
         with CONFIG.open("w") as f:
             DATA["follows"]["channels"] = STREAMS
             json.dump(DATA, f)
-        subprocess.run(
-            ["notify-send", f"Finished importing {user}'s followed streams"]
-        )
+        subprocess.run(["notify-send", f"Finished importing {user}'s followed streams"])
         subprocess.run(["notify-send", f"Added {follows} to database"])
         return
 
@@ -138,32 +136,44 @@ class Api:
             DATA["follows"]["categories"] = CATEGORIES
             json.dump(DATA, f)
         CATEGORIES.sort()
-        return '\n'.join(CATEGORIES)
+        return "\n".join(CATEGORIES)
 
     def notifications(self, streams_data: dict, new_streams: str):
+        """New streams notifications"""
         for stream in new_streams:
-            title=streams_data[stream]["title"]
-            game_name=streams_data[stream]["game_name"]
-            command = [
-                "notify-send",
-                f"{stream} is live!",
-                f"{title}\n{game_name}"
-            ]
+            title = streams_data[stream]["title"]
+            game_name = streams_data[stream]["game_name"]
+            command = ["notify-send", f"{stream} is live!", f"{title}\n{game_name}"]
             subprocess.run(command)
 
-    def open_stream(self, stream: str):
+    def open_stream(self, stream: str, no_chat: bool):
         """Open the selected channel's stream in mpv and chat in chatterino"""
         self.kill_process(["mpv", "chatterino"])
         stream = stream.split()[0]
         subprocess.run(["notify-send", f"Launching {stream}'s stream"])
+        if no_chat:
+            subprocess.Popen(
+                [
+                    "streamlink",
+                    "-p",
+                    "mpv",
+                    "-a",
+                    "--fs",
+                    f"https://www.twitch.tv/{stream}",
+                ],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                start_new_session=True,
+            )
+            return
         subprocess.Popen(
-            ["chatterino", "-c", stream],
+            ["streamlink", f"https://www.twitch.tv/{stream}"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
         )
         subprocess.Popen(
-            ["streamlink", f"https://www.twitch.tv/{stream}"],
+            ["chatterino", "-c", stream],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             start_new_session=True,
@@ -183,7 +193,7 @@ def livestreams_thread():
     global LIVESTREAMS, STREAMS, LIVESTREAMS_LIST
     while True:
         if STREAMS:
-            api=Api()
+            api = Api()
             streams_data, streams_list, LIVESTREAMS = api.get_live_streams(STREAMS)
             new_streams = set(streams_list).difference(set(LIVESTREAMS_LIST))
             LIVESTREAMS_LIST = streams_list
@@ -212,7 +222,7 @@ def main():
     x = threading.Thread(target=livestreams_thread, args=())
     x.start()
     with SimpleXMLRPCServer(
-        ("localhost", 8000), requestHandler=SimpleXMLRPCRequestHandler, allow_none=True
+        ("0.0.0.0", 9000), requestHandler=SimpleXMLRPCRequestHandler, allow_none=True
     ) as server:
         server.register_instance(Api())
         server.serve_forever()
