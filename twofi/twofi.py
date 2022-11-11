@@ -42,7 +42,7 @@ class fzf:
         exit_code = proc.returncode
         if "error_code" in answer:
             exit_code = int(answer.split("error_code")[0])
-            answer = answer.split("error_code")[1]
+            answer = answer.split("error_code")[1].strip()
         return answer, exit_code
 
     def handle_selection(self, entries: list, command: list, type=None):

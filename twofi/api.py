@@ -194,12 +194,16 @@ def livestreams_thread():
     while True:
         if STREAMS:
             api = Api()
-            streams_data, streams_list, LIVESTREAMS = api.get_live_streams(STREAMS)
+            try:
+                streams_data, streams_list, LIVESTREAMS = api.get_live_streams(STREAMS)
+            except:
+                time.sleep(60)
+                continue
             new_streams = set(streams_list).difference(set(LIVESTREAMS_LIST))
             LIVESTREAMS_LIST = streams_list
             if new_streams:
                 api.notifications(streams_data, new_streams)
-            time.sleep(30)
+            time.sleep(60)
         else:
             time.sleep(1)
 
